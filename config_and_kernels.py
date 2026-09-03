@@ -63,7 +63,7 @@ __device__ float fast_tanh(float x) {
     return a / b;
 }
 
-#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ < 600
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 200
 __device__ float atomicAdd(float* address, float val) {
     unsigned int* addr_as_ull = (unsigned int*)address;
     unsigned int old = *addr_as_ull, assumed;
@@ -76,9 +76,12 @@ __device__ float atomicAdd(float* address, float val) {
 #endif
 
 // --- NEURAL NETWORK INFERENCE KERNELS ---
-extern "C" __global__ void dense_inference(float* inputs, float* all_weights, float* outputs, int max_players) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= max_players) return;
+extern "C" __global__ void dense_inference(float* inputs, float* all_weights, float* outputs,
+                                           int* active_players, int* player_count, int max_players) {
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
+    int n = player_count[0];
+    if(k >= n) return;
+    int idx = active_players[k];
 
     int w_offset = idx * ${TOTAL_PARAMS};
     float hidden[${N_HID}];
@@ -98,13 +101,15 @@ extern "C" __global__ void dense_inference(float* inputs, float* all_weights, fl
         float sum = 0.0f;
         for(int h=0; h<${N_HID}; h++) sum += hidden[h] * all_weights[w_offset + (h * ${N_OUT} + o)];
         sum += all_weights[w_offset + (${N_HID} * ${N_OUT}) + o];
-        outputs[(idx * ${N_OUT}) + o] = (o < 3) ? fast_tanh(sum) : sum;
+        outputs[(idx * ${N_OUT}) + o] = (o < 3) ? fast_tanh(sum) : max(-10.0f, min(sum, 10.0f));
     }
 }
 
-extern "C" __global__ void stat_plan_inference(float* all_weights, float* outputs, int max_players) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= max_players) return;
+extern "C" __global__ void stat_plan_inference(float* all_weights, float* outputs,
+                                               int* player_list, int player_count) {
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if(k >= player_count) return;
+    int idx = player_list[k];
 
     int w_offset = idx * ${STAT_PLAN_PARAMS};
     float hidden[${STAT_PLAN_HID}];
@@ -129,9 +134,11 @@ extern "C" __global__ void stat_plan_inference(float* all_weights, float* output
     }
 }
 
-extern "C" __global__ void shop_plan_inference(float* all_weights, float* outputs, int max_players) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= max_players) return;
+extern "C" __global__ void shop_plan_inference(float* all_weights, float* outputs,
+                                               int* player_list, int player_count) {
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if(k >= player_count) return;
+    int idx = player_list[k];
 
     int w_offset = idx * ${SHOP_PLAN_PARAMS};
     float hidden[${SHOP_PLAN_HID}];
