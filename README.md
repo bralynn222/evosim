@@ -39,15 +39,6 @@ By combining raw CUDA C++ kernels, stream compaction, low-overhead Cython orches
 └── README.md
 ```
 
----
-
-## Getting Started
-
-### Prerequisites
-* NVIDIA GPU with current drivers
-* CUDA Toolkit 11.x or 12.x
-* Python 3.9+
-* C++ Build Tools (MSVC for Windows / GCC for Linux)
 
 ### Installation
 
