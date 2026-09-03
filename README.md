@@ -1,9 +1,6 @@
 ```markdown
 # G-EvoSim: High-Throughput Zero-Copy GPU Evolutionary Engine
 
-[![Language](https://img.shields.io/badge/Language-CUDA%20%7C%20C%2B%2B%20%7C%20Cython%20%7C%20Python-blue.svg)](#)
-[![Performance](https://img.shields.io/badge/Performance-2700%2B%20FPS-brightgreen.svg)](#)
-[![Architecture](https://img.shields.io/badge/Compute-99.5%25%20GPU%20Resident-orange.svg)](#)
 
 A massively parallel, hardware-accelerated evolutionary artificial intelligence simulation engine. Built to eliminate the host-device bottleneck entirely, **G-EvoSim** executes agent neural inference, physics, spatial queries, evolutionary genetic mutations, and rendering memory assembly directly in VRAM on the GPU.
 
@@ -18,79 +15,6 @@ By combining raw CUDA C++ kernels, stream compaction, low-overhead Cython orches
 * **Warp-Aggregated Stream Compaction:** Entity filtering uses `__ballot_sync` and `__shfl_sync` shuffle intrinsics, reducing global memory atomic contention by up to 32x per warp.
 * **Double-Buffered Asynchronous Dispatch:** CUDA compute streams and OpenGL draw calls execute concurrently across ping-pong VBOs synchronized via non-blocking `cudaEvent_t` barriers.
 * **Hardware-Aware Driver Workarounds:** Programmatic DirectX User Preferences registry modification and hybrid graphics (NVIDIA Optimus) arbitration ensures runtime OpenGL context creation stays anchored to the high-performance discrete GPU.
-
----
-
-## Architectural Overview
-
-```
-                      +---------------------------------------+
-                      |         HOST (CPU / Cython)           |
-                      |  - Low-Frequency (30-frame) Evolution |
-                      |  - Window Event Loop & Dispatch       |
-                      +-------------------+-------------------+
-                                          | Non-blocking Enqueue
-                                          v
-+---------------------------------------------------------------------------------+
-|                               DEVICE VRAM (CUDA)                                |
-|                                                                                 |
-|  +---------------------+        +--------------------+        +---------------+ |
-|  | compact_active      | -----> | dense_inference    | -----> | update_       | |
-|  | Warp-level shuffle  |        | Multi-Head MLP     |        | players/swords| |
-|  +---------------------+        +--------------------+        +---------------+ |
-|                                                                       |         |
-|  +--------------------------------------------------------------------+         |
-|  |                                                                              |
-|  v                                                                              |
-|  +---------------------+        +--------------------+        +---------------+ |
-|  | update_enemies      | -----> | pack_render_single | -----> | Mapped OpenGL | |
-|  | Spatial & HP checks |        | VBO Interop Kernel |        | VBO (Buffer A)| |
-|  +---------------------+        +--------------------+        +---------------+ |
-+-----------------------------------------------------------------------|---------+
-                                                                        | Zero-Copy
-                                                                        v Render
-                                                                +---------------+
-                                                                | OpenGL Context|
-                                                                | Instanced VBO |
-                                                                +---------------+
-```
-
----
-
-## Deep Dive: Low-Level Optimizations
-
-### 1. Warp-Aggregated Stream Compaction
-Simulating dynamic lifecycles (entities dying and spawning) typically causes severe warp divergence. Rather than scanning all entity slots or issuing thread-level `atomicAdd` instructions, the compaction pass uses intra-warp register communication:
-```cpp
-unsigned int amask = __ballot_sync(0xffffffffu, is_active);
-int lane = threadIdx.x & 31;
-int warp_count = __popc(amask);
-int warp_offset = 0;
-if (lane == 0 && warp_count > 0) {
-    warp_offset = atomicAdd(out_count, warp_count); // 1 atomic per warp
-}
-warp_offset = __shfl_sync(0xffffffffu, warp_offset, 0);
-if (is_active) {
-    unsigned int prefix = amask & ((1u << lane) - 1);
-    out_list[warp_offset + __popc(prefix)] = start + i;
-}
-```
-
-### 2. Zero-Copy CUDA/OpenGL Interop
-Traditional simulation loops read data back to host memory using `glBufferSubData` or NumPy arrays. G-EvoSim dynamically registers OpenGL instances with the CUDA driver runtime:
-```python
-# Mapped directly to GPU virtual memory
-cu.register_buffer(ctypes.byref(res), ivbo, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD)
-cu.map(1, ctypes.byref(res), 0)
-cu.get_ptr(ctypes.byref(ptr), ctypes.byref(size), res)
-
-# Custom packed render kernel directly writes to VRAM buffer
-self.sim.render_buf = cp.ndarray((TOTAL_ENTITIES * 6,), dtype=cp.float32, memptr=mem)
-```
-
-### 3. Transcendental Math Optimizations
-All continuous actor activations replace expensive floating-point `tanh` instructions with a degree-5 Padé approximant (`fast_tanh`), compiling down to fast fused multiply-add (FMA) instructions:
-$$\tanh(x) \approx \frac{x(135135 + x^2(17325 + x^2(378 + x^2)))}{135135 + x^2(62370 + x^2(3150 + 28x^2))}$$
 
 ---
 
