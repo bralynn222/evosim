@@ -30,15 +30,6 @@ By combining raw CUDA C++ kernels, stream compaction, low-overhead Cython orches
 
 ## Project Structure
 
-```
-├── main.py                 # Engine bootstrap, CUDA-GL interop, loop orchestration
-├── config_and_kernels.py   # Simulation configurations & inference CUDA source
-├── physics_kernels.py      # Spatial partitioning, entity updates & compaction kernels
-├── evolution_core.pyx      # Cython-accelerated host decision loops
-├── setup.py                # C-Extension build script with platform-specific flags
-└── README.md
-```
-
 
 ### Installation
 
