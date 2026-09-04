@@ -1,4 +1,4 @@
-```markdown
+
 # G-EvoSim: High-Throughput Zero-Copy GPU Evolutionary Engine
 
 
@@ -27,7 +27,7 @@ By combining raw CUDA C++ kernels, stream compaction, low-overhead Cython orches
 * **Target Hardware:** NVIDIA GPUs (Turing, Ampere, Ada Lovelace, Hopper+)
 
 ---
-,,,
+
 ## Project Structure
 
 
